@@ -1,5 +1,7 @@
 #!/usr/bin/with-contenv bash
-
+#
+# IMPORTANT: Ensure that "LF" is used (rather than "CRLF") on Windows systems
+#
 date >/dev/null
 sleep 10
 if [[ -n "$DB_DUMP_DEBUG" ]]; then
@@ -130,6 +132,10 @@ function uri_parser() {
 
   # enter the loop
   while true; do
+	# RW - record the start time
+	dump_start_time=$(date +"%s")
+	echo Backup started at $(dump_start_time)
+  
     # make sure the directory exists
     mkdir -p $TMPDIR
 
@@ -194,7 +200,10 @@ function uri_parser() {
         find /backups/  -mmin +$DB_CLEANUP_TIME -iname "mongo_$DBNAME_*.*" -exec rm {} \;
         fi
 
-     # wait
-    sleep $(($DB_DUMP_FREQ*60))
+    # RW - calculate wait time based on dump start time, then wait...
+	dump_end_time=$(date +"%s")
+	echo Backup completed at $(dump_start_time)
+	dump_duration=$(($dump_end_time - $dump_start_time))
+	sleep $(($DB_DUMP_FREQ*60 - $dump_duration))
 
   done
