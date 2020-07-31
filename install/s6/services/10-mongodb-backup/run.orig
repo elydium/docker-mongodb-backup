@@ -1,7 +1,5 @@
 #!/usr/bin/with-contenv bash
-#
-# IMPORTANT: Ensure that "LF" is used (rather than "CRLF") on Windows systems
-#
+
 date >/dev/null
 sleep 10
 if [[ -n "$DB_DUMP_DEBUG" ]]; then
@@ -108,52 +106,48 @@ function uri_parser() {
 	# determine target proto
 	uri_parser ${DB_DUMP_TARGET}
 
-	# wait for the next time to start a backup
-	# for debugging
-	echo Starting at $(date)
-	current_time=$(date +"%s")
-	# get the begin time on our date
-	# REMEMBER: we are using the basic date package in alpine
-	today=$(date +"%Y%m%d")
-	# could be a delay in minutes or an absolute time of day
-	if [[ $DB_DUMP_BEGIN =~ ^\+(.*)$ ]]; then
-	waittime=$(( ${BASH_REMATCH[1]} * 60 ))
-	else
-	target_time=$(date --date="${today}${DB_DUMP_BEGIN}" +"%s")
+  # wait for the next time to start a backup
+  # for debugging
+  echo Starting at $(date)
+  current_time=$(date +"%s")
+  # get the begin time on our date
+  # REMEMBER: we are using the basic date package in alpine
+  today=$(date +"%Y%m%d")
+  # could be a delay in minutes or an absolute time of day
+  if [[ $DB_DUMP_BEGIN =~ ^\+(.*)$ ]]; then
+    waittime=$(( ${BASH_REMATCH[1]} * 60 ))
+  else
+    target_time=$(date --date="${today}${DB_DUMP_BEGIN}" +"%s")
 
-	if [[ "$target_time" < "$current_time" ]]; then
-	  target_time=$(($target_time + 24*60*60))
-	fi
+    if [[ "$target_time" < "$current_time" ]]; then
+      target_time=$(($target_time + 24*60*60))
+    fi
 
-	waittime=$(($target_time - $current_time))
-	fi
+    waittime=$(($target_time - $current_time))
+  fi
 
-	sleep $waittime
+  sleep $waittime
 
-	# enter the loop
-	while true; do
-	# RW - record the start time
-	dump_start_time=$(date +"%s")
-	echo Backup started at ${dump_start_time}
+  # enter the loop
+  while true; do
+    # make sure the directory exists
+    mkdir -p $TMPDIR
 
-	# make sure the directory exists
-	mkdir -p $TMPDIR
+    # what is the name of our target?
+    now=$(date +"%Y%m%d-%H%M%S")
+    TARGET=mongo_${DBNAME}_${DBHOST}_${now}
 
-	# what is the name of our target?
-	now=$(date +"%Y%m%d-%H%M%S")
-	TARGET=mongo_${DBNAME}_${DBHOST}_${now}
+    # make the dump
+    mongodump --out ${TMPDIR}/${TARGET} --host ${DBHOST} --port ${DBPORT} ${USER_STR}${PASS_STR}${DB_STR} ${EXTRA_OPTS}
+    cd ${TMPDIR}
+    tar cf ${TARGET}.tar ${TARGET}/* && rm -R ${TARGET}
+    TARGET=${TARGET}.tar     
 
-	# make the dump
-	mongodump --out ${TMPDIR}/${TARGET} --host ${DBHOST} --port ${DBPORT} ${USER_STR}${PASS_STR}${DB_STR} ${EXTRA_OPTS}
-	cd ${TMPDIR}
-	tar cvf ${TARGET}.tar ${TARGET}/* && rm -R ${TARGET}
-	TARGET=${TARGET}.tar     
-
-	# take md5 sum
-	if [ "$MD5" = "TRUE" ];  then  
-	cd $TMPDIR
-	md5sum ${TARGET} > ${TARGET}.md5
-	fi
+    # take md5 sum
+  if [ "$MD5" = "TRUE" ];  then  
+    cd $TMPDIR
+    md5sum ${TARGET} > ${TARGET}.md5
+  fi
 
     # do the compression
     case "$COMPRESSION" in
@@ -200,10 +194,7 @@ function uri_parser() {
         find /backups/  -mmin +$DB_CLEANUP_TIME -iname "mongo_$DBNAME_*.*" -exec rm {} \;
         fi
 
-    # RW - calculate wait time based on dump start time, then wait...
-	dump_end_time=$(date +"%s")
-	echo Backup completed at ${dump_start_time}
-	dump_duration=$(($dump_end_time - $dump_start_time))
-	sleep $(($DB_DUMP_FREQ*60 - $dump_duration))
+     # wait
+    sleep $(($DB_DUMP_FREQ*60))
 
   done
