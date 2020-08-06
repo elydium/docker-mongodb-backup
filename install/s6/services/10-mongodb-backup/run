@@ -143,10 +143,15 @@ function uri_parser() {
 	now=$(date +"%Y%m%d-%H%M%S")
 	TARGET=mongo_${DBNAME}_${DBHOST}_${now}
 
-	# make the dump
+	# perform the dump (and wait for it to complete)
 	mongodump --out ${TMPDIR}/${TARGET} --host ${DBHOST} --port ${DBPORT} ${USER_STR}${PASS_STR}${DB_STR} ${EXTRA_OPTS}
+	wait
+	
+	# create a tar archive from the dumped files
 	cd ${TMPDIR}
-	tar cvf ${TARGET}.tar ${TARGET}/* && rm -R ${TARGET}
+	tar cvf ${TARGET}.tar ${TARGET}/*
+	wait
+	rm -R ${TARGET}
 	TARGET=${TARGET}.tar     
 
 	# take md5 sum
