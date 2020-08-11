@@ -105,36 +105,37 @@ function uri_parser() {
 }
 
 
-	# determine target proto
-	uri_parser ${DB_DUMP_TARGET}
+# determine target proto
+uri_parser ${DB_DUMP_TARGET}
 
-	# wait for the next time to start a backup
-	# for debugging
-	echo Starting at $(date)
-	current_time=$(date +"%s")
-	# get the begin time on our date
-	# REMEMBER: we are using the basic date package in alpine
-	today=$(date +"%Y%m%d")
-	# could be a delay in minutes or an absolute time of day
-	if [[ $DB_DUMP_BEGIN =~ ^\+(.*)$ ]]; then
-	waittime=$(( ${BASH_REMATCH[1]} * 60 ))
-	else
-	target_time=$(date --date="${today}${DB_DUMP_BEGIN}" +"%s")
+# wait for the next time to start a backup
+# for debugging
+echo Starting at $(date)
+current_time=$(date +"%s")
+# get the begin time on our date
+# REMEMBER: we are using the basic date package in alpine
+today=$(date +"%Y%m%d")
+# could be a delay in minutes or an absolute time of day
+if [[ $DB_DUMP_BEGIN =~ ^\+(.*)$ ]]; then
+waittime=$(( ${BASH_REMATCH[1]} * 60 ))
+else
+target_time=$(date --date="${today}${DB_DUMP_BEGIN}" +"%s")
 
-	if [[ "$target_time" < "$current_time" ]]; then
-	  target_time=$(($target_time + 24*60*60))
-	fi
+if [[ "$target_time" < "$current_time" ]]; then
+  target_time=$(($target_time + 24*60*60))
+fi
 
-	waittime=$(($target_time - $current_time))
-	fi
+waittime=$(($target_time - $current_time))
+fi
 
-	sleep $waittime
+sleep $waittime
 
-	# enter the loop
-	while true; do
+# enter the loop
+while true; do
+
 	# RW - record the start time
 	dump_start_time=$(date +"%s")
-	echo Backup started at ${dump_start_time}
+	echo Backup started
 
 	# make sure the directory exists
 	mkdir -p $TMPDIR
@@ -145,13 +146,23 @@ function uri_parser() {
 
 	# perform the dump (and wait for it to complete)
 	mongodump --out ${TMPDIR}/${TARGET} --host ${DBHOST} --port ${DBPORT} ${USER_STR}${PASS_STR}${DB_STR} ${EXTRA_OPTS}
-	wait
-	
+
+	# debug - wait for one minute to ensure that dump process has completed
+	#sleep 60
+		
 	# create a tar archive from the dumped files
+	echo Mongodump complete. Starting tar process...
 	cd ${TMPDIR}
 	tar cvf ${TARGET}.tar ${TARGET}/*
-	wait
-	rm -R ${TARGET}
+
+	# debug - wait for one minute to ensure that tar process has completed
+	#sleep 60
+	
+	# debug - list tar contents
+	#tar tvf ${TARGET}.tar
+		
+	echo Tar complete. Compressing...
+	TARGET_FOLDER=${TARGET}
 	TARGET=${TARGET}.tar     
 
 	# take md5 sum
@@ -200,15 +211,18 @@ function uri_parser() {
         ;;
     esac
 
-    # Perform Automatic Cleanup 
-        if [[ -n "$DB_CLEANUP_TIME" ]]; then
-        find /backups/  -mmin +$DB_CLEANUP_TIME -iname "mongo_$DBNAME_*.*" -exec rm {} \;
-        fi
+	echo Compression complete. Deleting ${TARGET_FOLDER}...
+	rm -R ${TARGET_FOLDER}
 
-    # RW - calculate wait time based on dump start time, then wait...
+    # Perform Automatic Cleanup 
+	if [[ -n "$DB_CLEANUP_TIME" ]]; then
+        find /backups/  -mmin +$DB_CLEANUP_TIME -iname "mongo_$DBNAME_*.*" -exec rm {} \;
+	fi
+
+    # RW - calculate wait time until next dump, based on current dump start and end times, then wait...
 	dump_end_time=$(date +"%s")
-	echo Backup completed at ${dump_start_time}
+	echo Backup completed
 	dump_duration=$(($dump_end_time - $dump_start_time))
 	sleep $(($DB_DUMP_FREQ*60 - $dump_duration))
 
-  done
+done
